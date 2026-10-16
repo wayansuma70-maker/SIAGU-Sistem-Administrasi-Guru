@@ -53,3 +53,7 @@ td{padding:10px 12px;border-bottom:1px solid #F1F5F9}tr:hover td{background:#F8F
  aside{position:fixed;left:-280px;z-index:20;transition:.25s}aside.open{left:0;box-shadow:0 0 0 100vmax rgba(15,23,42,.4)}
  #menu{display:block}.top{padding:10px 14px}#view{padding:16px}.grid4,.grid2,.row2{grid-template-columns:1fr 1fr}.sync{display:none}h1{font-size:22px}}
 @media(max-width:560px){.grid4,.grid2,.row2{grid-template-columns:1fr}}
+.ov{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(4px);display:grid;place-items:center;z-index:60;padding:16px;overflow:auto}
+.md{width:100%;max-width:600px}.acts{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}#sadd,#gadd{margin:12px 0}
+td a{color:var(--p2);font-weight:600}

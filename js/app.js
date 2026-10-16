@@ -37,7 +37,7 @@ function logout() { S = null; kelasCache = null; localStorage.removeItem('siagu'
 $('#out').onclick = logout;
 $('#menu').onclick = () => $('#side').classList.toggle('open');
 
-const PAGES = { dashboard: ['🏠 Dashboard', pDash], jurnal: ['📖 Jurnal Mengajar & Presensi', pJurnal], nilai: ['📝 Penilaian Siswa / Gradebook', pNilai], siswa: ['🎓 Data Siswa & Direktori', pSiswa], rekap: ['🖨️ Rekap & Cetak PDF', pRekap] };
+const PAGES = { dashboard: ['🏠 Dashboard', pDash], jurnal: ['📖 Jurnal Mengajar & Presensi', pJurnal], nilai: ['📝 Penilaian Siswa / Gradebook', pNilai], siswa: ['🎓 Data Siswa & Direktori', pSiswa], rekap: ['🖨️ Rekap & Cetak PDF', pRekap], pengaturan: ['⚙️ Pengaturan Data', pPengaturan] };
 
 function boot() {
   $('#login').hidden = !!S; $('#app').hidden = !S;
@@ -47,8 +47,10 @@ function boot() {
   route();
 }
 const route = safe(async () => {
-  const k = (location.hash.slice(1) || 'dashboard'), p = PAGES[k] || PAGES.dashboard;
-  $('#nav').innerHTML = Object.entries(PAGES).map(([id, v]) => `<a href="#${id}" class="${id === (PAGES[k] ? k : 'dashboard') ? 'on' : ''}">${v[0]}</a>`).join('');
+  const adm = S.user.peran === 'Admin';
+  let k = location.hash.slice(1) || 'dashboard'; if (!PAGES[k] || (k === 'pengaturan' && !adm)) k = 'dashboard';
+  const p = PAGES[k];
+  $('#nav').innerHTML = Object.entries(PAGES).filter(([id]) => id !== 'pengaturan' || adm).map(([id, v]) => `<a href="#${id}" class="${id === k ? 'on' : ''}">${v[0]}</a>`).join('');
   $('#side').classList.remove('open');
   await p[1]();
 });
@@ -147,15 +149,96 @@ async function pNilai() {
   });
 }
 
-// ---------- Data Siswa ----------
+// ---------- Data Siswa & Guru (tambah / edit / hapus untuk Admin) ----------
+function modal(title, body, onSave) {
+  const o = document.createElement('div'); o.className = 'ov';
+  o.innerHTML = `<form class="card md"><h2>${title}</h2><br>${body}<div class="acts"><button type="button" class="btn out" data-x>Batal</button><button class="btn" type="submit">Simpan</button></div></form>`;
+  document.body.appendChild(o);
+  const f = $('form', o), close = () => o.remove();
+  $('[data-x]', o).onclick = close;
+  f.onsubmit = safe(async e => { e.preventDefault(); await onSave(f); close(); });
+}
+function readPdf(i) {
+  return new Promise((res, rej) => {
+    const f = i.files[0]; if (!f) return res(null);
+    if (!/\.pdf$/i.test(f.name)) return rej(new Error('Berkas harus berformat PDF.'));
+    if (f.size > 5 * 1024 * 1024) return rej(new Error('PDF maksimal 5 MB.'));
+    const r = new FileReader(); r.onload = () => res({ name: f.name, data: r.result.split(',')[1] }); r.readAsDataURL(f);
+  });
+}
+const pdfLink = l => l ? `<a href="${esc(l)}" target="_blank" rel="noopener">📄 Lihat</a>` : '-';
+const actBtns = id => `<button class="ghost" data-a="e" data-i="${esc(id)}">✏️ Edit</button><button class="ghost" style="color:var(--er)" data-a="d" data-i="${esc(id)}">🗑️ Hapus</button>`;
+const selOpt = (a, v) => a.map(x => `<option ${x === v ? 'selected' : ''}>${x}</option>`).join('');
+
 async function pSiswa() {
-  const kl = await kelasList(); let all = (await api('siswa', {})).data.siswa;
-  $('#view').innerHTML = `<div class="pg"><div><h1>Data Siswa & Direktori</h1><p class="mu">Cari berdasarkan nama, NIS, atau kelas.</p></div></div>
-  <div class="card"><div class="row2"><label>Cari<input id="sq" placeholder="Nama atau NIS..."></label><label>Kelas<select id="sk"><option value="">Semua</option>${opts(kl)}</select></label></div><div class="scroll" id="st"></div></div>`;
-  const draw = () => { const q = $('#sq').value.toLowerCase(), k = $('#sk').value;
-    const f = all.filter(s => (!k || s.kelas === k) && (String(s.nis).includes(q) || s.nama.toLowerCase().includes(q)));
-    $('#st').innerHTML = `<table><tr><th>NIS</th><th>Nama</th><th>Kelas</th><th>JK</th><th>Status</th></tr>${f.map(s => `<tr><td>${s.nis}</td><td><b>${esc(s.nama)}</b></td><td>${esc(s.kelas)}</td><td>${esc(s.jk)}</td><td><span class="chip H">${esc(s.status)}</span></td></tr>`).join('')}</table>`; };
+  $('#view').innerHTML = `<div class="pg"><div><h1>Data Siswa & Direktori</h1><p class="mu">Cari berdasarkan nama, NIS, atau kelas.</p></div></div><div id="pn"></div>`;
+  await siswaPanel($('#pn'));
+}
+async function siswaPanel(el) {
+  const adm = S.user.peran === 'Admin'; kelasCache = null;
+  const d = (await api('siswa', {})).data, all = d.siswa, kl = d.kelas;
+  el.innerHTML = `<div class="card"><div class="row2"><label>Cari<input id="sq" placeholder="Nama atau NIS..."></label><label>Kelas<select id="sk"><option value="">Semua</option>${opts(kl)}</select></label></div>
+    ${adm ? '<button class="btn sm" id="sadd">+ Tambah Siswa</button>' : ''}<div class="scroll" id="st"></div></div>`;
+  const draw = () => {
+    const q = $('#sq').value.toLowerCase(), k = $('#sk').value;
+    const f = all.filter(s => (!k || s.kelas === k) && (String(s.nis).includes(q) || String(s.nama).toLowerCase().includes(q)));
+    $('#st').innerHTML = `<table><tr><th>NIS</th><th>Nama</th><th>Kelas</th><th>JK</th><th>Status</th><th>Berkas</th>${adm ? '<th>Aksi</th>' : ''}</tr>${f.map(s =>
+      `<tr><td>${s.nis}</td><td><b>${esc(s.nama)}</b></td><td>${esc(s.kelas)}</td><td>${esc(s.jk)}</td><td><span class="chip ${s.status === 'Aktif' ? 'H' : 'A'}">${esc(s.status)}</span></td><td>${pdfLink(s.link_pdf)}</td>${adm ? `<td style="white-space:nowrap">${actBtns(s.nis)}</td>` : ''}</tr>`).join('') || '<tr><td colspan="7" class="mu">Tidak ada data.</td></tr>'}</table>`;
+  };
+  const form = s => modal(s ? 'Edit Siswa' : 'Tambah Siswa', `<div class="row2">
+    <label>NIS<input name="nis" required value="${esc(s?.nis)}"></label><label>Nama Lengkap<input name="nama" required value="${esc(s?.nama)}"></label>
+    <label>Kelas<input name="kelas" list="kls" required value="${esc(s?.kelas)}" placeholder="contoh: X TKJ 1"><datalist id="kls">${kl.map(k => `<option value="${esc(k)}">`).join('')}</datalist></label>
+    <label>Jenis Kelamin<select name="jk"><option value="L" ${s?.jk === 'L' ? 'selected' : ''}>Laki-laki (L)</option><option value="P" ${s?.jk === 'P' ? 'selected' : ''}>Perempuan (P)</option></select></label>
+    <label>Status<select name="status">${selOpt(['Aktif', 'Nonaktif'], s?.status)}</select></label>
+    <label>Berkas PDF (opsional, maks. 5 MB)<input type="file" name="pdf" accept="application/pdf"></label></div>
+    ${s?.link_pdf ? `<p class="mu">Berkas saat ini: ${pdfLink(s.link_pdf)} — pilih file baru untuk menggantinya.</p>` : ''}`,
+  async f => {
+    const e = f.elements, pdf = await readPdf(e.pdf);
+    const r = await api('saveSiswa', { oldNis: s ? s.nis : '', nis: e.nis.value.trim(), nama: e.nama.value.trim(), kelas: e.kelas.value.trim(), jk: e.jk.value, status: e.status.value, pdf });
+    notif(r.message); await siswaPanel(el);
+  });
   $('#sq').oninput = draw; $('#sk').onchange = draw; draw();
+  if (adm) {
+    $('#sadd').onclick = () => form();
+    $('#st').onclick = safe(async e => {
+      const b = e.target.closest('[data-a]'); if (!b) return;
+      const s = all.find(x => String(x.nis) === b.dataset.i);
+      if (b.dataset.a === 'e') form(s);
+      else if (confirm(`Hapus siswa ${s.nama} (NIS ${s.nis})? Tindakan ini tidak dapat dibatalkan.`)) { notif((await api('hapusSiswa', { nis: s.nis })).message); await siswaPanel(el); }
+    });
+  }
+}
+async function guruPanel(el) {
+  const all = (await api('getGuru', {})).data.guru;
+  el.innerHTML = `<div class="card"><button class="btn sm" id="gadd">+ Tambah Guru</button><div class="scroll"><table><tr><th>Nama</th><th>Email</th><th>Peran</th><th>Mapel</th><th>Kelas</th><th>Status</th><th>Berkas</th><th>Aksi</th></tr>${all.map(g =>
+    `<tr><td><b>${esc(g.nama)}</b><br><small class="mu">${esc(g.nip)}</small></td><td>${esc(g.email)}</td><td>${esc(g.peran)}</td><td>${esc(g.mapel)}</td><td>${esc(g.kelas)}</td><td><span class="chip ${g.status === 'Aktif' ? 'H' : 'A'}">${esc(g.status)}</span></td><td>${pdfLink(g.link_pdf)}</td><td style="white-space:nowrap">${actBtns(g.email)}</td></tr>`).join('')}</table></div></div>`;
+  const form = g => modal(g ? 'Edit Guru' : 'Tambah Guru', `<div class="row2">
+    <label>Nama Lengkap<input name="nama" required value="${esc(g?.nama)}"></label><label>Email<input name="email" type="email" required value="${esc(g?.email)}"></label>
+    <label>Peran<select name="peran">${selOpt(['Guru', 'Admin'], g?.peran)}</select></label><label>NIP<input name="nip" value="${esc(g?.nip)}"></label>
+    <label>Mata Pelajaran<input name="mapel" value="${esc(g?.mapel)}"></label><label>Kelas diampu (pisahkan koma)<input name="kelas" value="${esc(g?.kelas)}" placeholder="X TKJ 1, X TKJ 2"></label>
+    <label>Status<select name="status">${selOpt(['Aktif', 'Nonaktif'], g?.status)}</select></label>
+    <label>PIN ${g ? '(kosongkan jika tidak diganti)' : '(min. 4 karakter)'}<input name="pin" type="password" autocomplete="new-password" ${g ? '' : 'required'}></label></div>
+    <label>Berkas PDF (opsional, maks. 5 MB)<input type="file" name="pdf" accept="application/pdf"></label>
+    ${g?.link_pdf ? `<p class="mu">Berkas saat ini: ${pdfLink(g.link_pdf)}</p>` : ''}`,
+  async f => {
+    const e = f.elements, pdf = await readPdf(e.pdf);
+    const r = await api('saveGuru', { oldEmail: g ? g.email : '', email: e.email.value, nama: e.nama.value, peran: e.peran.value, nip: e.nip.value, mapel: e.mapel.value, kelas: e.kelas.value, status: e.status.value, pin: e.pin.value, pdf });
+    notif(r.message); await guruPanel(el);
+  });
+  $('#gadd').onclick = () => form();
+  $('table', el).onclick = safe(async e => {
+    const b = e.target.closest('[data-a]'); if (!b) return;
+    const g = all.find(x => x.email === b.dataset.i);
+    if (b.dataset.a === 'e') form(g);
+    else if (confirm(`Hapus guru ${g.nama} (${g.email})? Tindakan ini tidak dapat dibatalkan.`)) { notif((await api('hapusGuru', { email: g.email })).message); await guruPanel(el); }
+  });
+}
+async function pPengaturan() {
+  $('#view').innerHTML = `<div class="pg"><div><h1>Pengaturan Data</h1><p class="mu">Kelola data siswa dan guru: tambah, ubah, hapus, dan unggah berkas PDF.</p></div></div>
+    <div class="tabs"><button class="btn" data-t="s">🎓 Data Siswa</button><button class="btn out" data-t="g">👩‍🏫 Data Guru</button></div><div id="pn"></div>`;
+  const go = async t => { $$('.tabs button').forEach(b => b.className = 'btn' + (b.dataset.t === t ? '' : ' out')); await (t === 's' ? siswaPanel : guruPanel)($('#pn')); };
+  $$('.tabs button').forEach(b => b.onclick = safe(() => go(b.dataset.t)));
+  await go('s');
 }
 
 // ---------- Rekap PDF ----------
