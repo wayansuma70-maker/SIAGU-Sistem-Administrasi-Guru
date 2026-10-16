@@ -37,13 +37,13 @@ function logout() { S = null; kelasCache = null; localStorage.removeItem('siagu'
 $('#out').onclick = logout;
 $('#menu').onclick = () => $('#side').classList.toggle('open');
 
-const PAGES = { dashboard: ['🏠 Dashboard', pDash], jurnal: ['📖 Jurnal Mengajar & Presensi', pJurnal], nilai: ['📝 Penilaian Siswa / Gradebook', pNilai], siswa: ['🎓 Data Siswa & Direktori', pSiswa], rekap: ['🖨️ Rekap & Cetak PDF', pRekap], pengaturan: ['⚙️ Pengaturan Data', pPengaturan] };
+const PAGES = { dashboard: ['🏠 Dashboard', pDash], jurnal: ['📖 Jurnal Mengajar & Presensi', pJurnal], nilai: ['📝 Penilaian Siswa / Gradebook', pNilai], siswa: ['🎓 Data Siswa & Direktori', pSiswa], rekap: ['🖨️ Rekap & Cetak PDF', pRekap], profil: ['👤 Profil & Sekolah', pProfil], pengaturan: ['⚙️ Pengaturan Data', pPengaturan] };
 
 function boot() {
   $('#login').hidden = !!S; $('#app').hidden = !S;
   if (!S) return;
   $('#ta').textContent = `T.A. ${TAHUN_AJARAN} • Semester ${SEMESTER}`;
-  $('#me').innerHTML = `<b>${esc(S.user.nama)}</b><br>${esc(S.user.peran)}${S.user.mapel ? ' • ' + esc(S.user.mapel) : ''}`;
+  meBox();
   route();
 }
 const route = safe(async () => {
@@ -235,10 +235,74 @@ async function guruPanel(el) {
 }
 async function pPengaturan() {
   $('#view').innerHTML = `<div class="pg"><div><h1>Pengaturan Data</h1><p class="mu">Kelola data siswa dan guru: tambah, ubah, hapus, dan unggah berkas PDF.</p></div></div>
-    <div class="tabs"><button class="btn" data-t="s">🎓 Data Siswa</button><button class="btn out" data-t="g">👩‍🏫 Data Guru</button></div><div id="pn"></div>`;
-  const go = async t => { $$('.tabs button').forEach(b => b.className = 'btn' + (b.dataset.t === t ? '' : ' out')); await (t === 's' ? siswaPanel : guruPanel)($('#pn')); };
+    <div class="tabs"><button class="btn" data-t="s">🎓 Data Siswa</button><button class="btn out" data-t="g">👩‍🏫 Data Guru</button><button class="btn out" data-t="x">📥 Import Excel</button></div><div id="pn"></div>`;
+  const go = async t => { $$('.tabs button').forEach(b => b.className = 'btn' + (b.dataset.t === t ? '' : ' out')); await ({ s: siswaPanel, g: guruPanel, x: importPanel }[t])($('#pn')); };
   $$('.tabs button').forEach(b => b.onclick = safe(() => go(b.dataset.t)));
   await go('s');
+}
+
+// ---------- Import Excel & Template ----------
+const TPL = {
+  siswa: { f: 'Template_Data_Siswa.xlsx', h: ['NIS', 'Nama', 'Kelas', 'JK', 'Status'], x: [['240199', 'Contoh Siswa', 'X TKJ 1', 'L', 'Aktif']], api: 'importSiswa', n: 'Siswa', info: 'NIS, Nama, Kelas wajib. JK: L/P. Status: Aktif/Nonaktif. NIS yang sudah ada akan diperbarui.' },
+  guru: { f: 'Template_Data_Guru.xlsx', h: ['Email', 'Nama', 'Peran', 'NIP', 'Mapel', 'Kelas', 'Status', 'PIN'], x: [['guru.baru@sekolah.sch.id', 'Contoh Guru, S.Pd.', 'Guru', '198001012005011001', 'Matematika', 'X TKJ 1, X TKJ 2', 'Aktif', '123456']], api: 'importGuru', n: 'Guru', info: 'Email, Nama wajib. Peran: Guru/Admin. Kelas dipisah koma. PIN wajib untuk akun baru (kosongkan untuk mempertahankan PIN lama).' }
+};
+const needX = () => { if (typeof XLSX === 'undefined') throw new Error('Pustaka Excel belum termuat. Periksa koneksi internet lalu muat ulang.'); };
+function downloadTpl(t) {
+  needX(); const c = TPL[t], wb = XLSX.utils.book_new(), ws = XLSX.utils.aoa_to_sheet([c.h, ...c.x]);
+  if (t === 'guru') ws['!cols'] = c.h.map(() => ({ wch: 22 }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Data'); XLSX.writeFile(wb, c.f);
+}
+async function readXlsx(file) {
+  needX(); const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '', raw: false })
+    .map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.trim().toLowerCase(), String(v).trim()])))
+    .filter(r => Object.values(r).some(v => v !== ''));
+}
+async function importPanel(el) {
+  const data = {};
+  el.innerHTML = Object.keys(TPL).map(t => `<div class="card sec"><h2>Import Data ${TPL[t].n} dari Excel</h2><p class="mu">${TPL[t].info}</p>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="btn out" data-t="${t}">⬇️ Unduh Template</button>
+    <input type="file" accept=".xlsx,.xls" data-f="${t}" style="width:auto"><button class="btn" data-i="${t}" disabled>Import</button><span class="mu" id="inf-${t}"></span></div></div>`).join('');
+  $$('[data-t]', el).forEach(b => b.onclick = safe(async () => downloadTpl(b.dataset.t)));
+  $$('[data-f]', el).forEach(i => i.onchange = safe(async () => {
+    const t = i.dataset.f; data[t] = i.files[0] ? await readXlsx(i.files[0]) : null;
+    $('#inf-' + t).textContent = data[t] ? `${data[t].length} baris siap diimpor` : ''; $(`[data-i=${t}]`, el).disabled = !(data[t] && data[t].length);
+  }));
+  $$('[data-i]', el).forEach(b => b.onclick = safe(async () => {
+    const t = b.dataset.i; if (!confirm(`Impor ${data[t].length} baris data ${TPL[t].n.toLowerCase()}?`)) return;
+    const r = await api(TPL[t].api, { rows: data[t] }); notif(r.message); kelasCache = null; data[t] = null; $('#inf-' + t).textContent = '✓ ' + r.message; b.disabled = true;
+  }));
+}
+
+// ---------- Profil & Sekolah ----------
+function meBox() { $('#me').innerHTML = `<b>${esc(S.user.nama)}</b><br>${esc(S.user.peran)}${S.user.mapel ? ' • ' + esc(S.user.mapel) : ''}${S.sekolah ? '<br><span class="mu">' + esc(S.sekolah) + '</span>' : ''}`; }
+const saveS = () => localStorage.setItem('siagu', JSON.stringify(S));
+async function pProfil() {
+  const d = (await api('getProfil', {})).data, me = d.me, sk = d.sekolah, adm = S.user.peran === 'Admin', dis = adm ? '' : 'disabled';
+  $('#view').innerHTML = `<div class="pg"><div><h1>Profil & Sekolah</h1><p class="mu">Data ini dipakai pada kop surat dan tanda tangan PDF.</p></div></div>
+  <div class="grid2"><form class="card" id="pf"><h2>Profil Saya</h2><br>
+    <label>Email (tidak dapat diubah)<input value="${esc(me.email)}" disabled></label>
+    <label>Nama Lengkap<input name="nama" required value="${esc(me.nama)}"></label>
+    <label>NIP<input name="nip" value="${esc(me.nip)}"></label>
+    <label>PIN Lama (isi hanya jika ingin ganti PIN)<input name="pl" type="password" autocomplete="current-password"></label>
+    <label>PIN Baru (min. 4 karakter)<input name="pb" type="password" autocomplete="new-password"></label>
+    <button class="btn">Simpan Profil</button></form>
+  <form class="card" id="sf"><h2>Profil Sekolah</h2><br>
+    <label>Nama Sekolah<input name="ns" ${dis} value="${esc(sk.nama_sekolah)}" placeholder="SMK Negeri 1 Jakarta"></label>
+    <label>Alamat Sekolah<textarea name="al" ${dis}>${esc(sk.alamat)}</textarea></label>
+    <label>Nama Kepala Sekolah<input name="kp" ${dis} value="${esc(sk.kepsek)}"></label>
+    <label>NIP Kepala Sekolah<input name="nk" ${dis} value="${esc(sk.nip_kepsek)}"></label>
+    ${adm ? '<button class="btn">Simpan Profil Sekolah</button>' : '<p class="mu">Hanya Admin yang dapat mengubah profil sekolah.</p>'}</form></div>`;
+  $('#pf').onsubmit = safe(async e => {
+    e.preventDefault(); const f = e.target.elements;
+    const r = await api('saveProfil', { nama: f.nama.value, nip: f.nip.value, pinLama: f.pl.value, pinBaru: f.pb.value });
+    S.user.nama = r.data.nama; saveS(); meBox(); f.pl.value = f.pb.value = ''; notif(r.message);
+  });
+  if (adm) $('#sf').onsubmit = safe(async e => {
+    e.preventDefault(); const f = e.target.elements;
+    const r = await api('saveSekolah', { nama_sekolah: f.ns.value, alamat: f.al.value, kepsek: f.kp.value, nip_kepsek: f.nk.value });
+    S.sekolah = r.data.nama_sekolah; saveS(); meBox(); notif(r.message);
+  });
 }
 
 // ---------- Rekap PDF ----------
