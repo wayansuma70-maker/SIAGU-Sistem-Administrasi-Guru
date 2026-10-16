@@ -339,7 +339,7 @@ async function importPanel(el) {
 }
 
 // ---------- Profil & Sekolah ----------
-function meBox() { $('#me').innerHTML = `<b>${esc(S.user.nama)}</b><br>${esc(S.user.peran)}${S.sekolah ? '<br><span class="mu">' + esc(S.sekolah) + '</span>' : ''}`; }
+function meBox() { $('#me').innerHTML = `<b>${esc(S.user.nama)}</b><br>${esc(S.user.peran)}${S.sekolah ? '<br><span class="mu">' + esc(S.sekolah) + '</span>' : ''}<br><small class="mu">SIAGU v5</small>`; }
 const saveS = () => localStorage.setItem('siagu', JSON.stringify(S));
 async function pProfil() {
   const adm = S.user.peran === 'Admin', dis = adm ? '' : 'disabled';
@@ -387,7 +387,7 @@ async function pRekap() {
   });
 }
 
-const NEED_API = 4; // versi backend minimum
+const NEED_API = 5; // versi backend minimum
 async function cekBackend() {
   try {
     const j = await (await fetch(GAS_URL)).json();
