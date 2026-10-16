@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SIAGU — Sistem Administrasi Guru</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="login" hidden>
+  <form id="loginForm" class="card login">
+    <div class="logo">S</div>
+    <h1>SIAGU</h1><p class="mu">Sistem Administrasi Guru</p>
+    <label>Email<input id="lEmail" type="email" required autocomplete="username"></label>
+    <label>PIN<input id="lPin" type="password" required autocomplete="current-password"></label>
+    <button class="btn" type="submit">Masuk</button>
+  </form>
+</div>
+<div id="app" hidden>
+  <aside id="side">
+    <div class="brand"><div class="logo">S</div><div><b>SIAGU</b><br><small class="mu">Sistem Administrasi Guru</small></div></div>
+    <span class="badge" id="ta"></span>
+    <nav id="nav"></nav>
+    <div class="me" id="me"></div>
+  </aside>
+  <main>
+    <header class="top">
+      <button class="ghost" id="menu">☰</button>
+      <span class="sync">● Google Sheets Terhubung</span>
+      <span class="grow"></span>
+      <a class="btn sm" href="#jurnal">+ Buat Jurnal Baru</a>
+      <button class="ghost" id="out">Keluar</button>
+    </header>
+    <div id="view"></div>
+  </main>
+</div>
+<div id="loading"><div class="spin"></div></div>
+<div id="notif" class="notif"></div>
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
