@@ -9,13 +9,35 @@
 </head>
 <body>
 <div id="login" hidden>
-  <form id="loginForm" class="card login">
-    <div class="logo">S</div>
-    <h1>SIAGU</h1><p class="mu">Sistem Administrasi Guru</p>
-    <label>Email<input id="lEmail" type="email" required autocomplete="username"></label>
-    <label>PIN<input id="lPin" type="password" required autocomplete="current-password"></label>
-    <button class="btn" type="submit">Masuk</button>
-  </form>
+  <div class="lg">
+    <section class="lg-art">
+      <div class="lg-brand"><div class="logo">S</div><b>SIAGU</b></div>
+      <div>
+        <h2>Administrasi guru jadi lebih ringkas.</h2>
+        <p>Jurnal mengajar, presensi, nilai, dan rekap PDF dalam satu tempat.</p>
+        <ul>
+          <li><i>📖</i> Jurnal &amp; presensi dengan foto kegiatan</li>
+          <li><i>📝</i> Gradebook otomatis dengan KKM</li>
+          <li><i>🖨️</i> Rekap PDF siap cetak, kop sekolah otomatis</li>
+        </ul>
+      </div>
+      <small>© SIAGU — Sistem Administrasi Guru</small>
+    </section>
+    <section class="lg-side">
+      <form id="loginForm" class="lg-form">
+        <div class="logo lg-m">S</div>
+        <h1>Selamat Datang 👋</h1>
+        <p class="mu">Masuk dengan email dan PIN yang terdaftar.</p>
+        <label>Email
+          <div class="fld"><span class="fi">✉️</span><input id="lEmail" type="email" required placeholder="nama@sekolah.sch.id" autocomplete="username"></div></label>
+        <label>PIN
+          <div class="fld"><span class="fi">🔒</span><input id="lPin" type="password" required placeholder="Masukkan PIN" autocomplete="current-password">
+            <button type="button" id="eye" class="eye" aria-label="Tampilkan PIN" title="Tampilkan/sembunyikan PIN"><svg class="ic-on" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><svg class="ic-off" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button></div></label>
+        <button class="btn lg-btn" id="lBtn" type="submit">Masuk</button>
+        <p class="mu lg-note">Lupa PIN? Hubungi admin sekolah.</p>
+      </form>
+    </section>
+  </div>
 </div>
 <div id="app" hidden>
   <aside id="side">
