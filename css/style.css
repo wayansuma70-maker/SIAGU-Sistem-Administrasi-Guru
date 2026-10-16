@@ -81,3 +81,14 @@ td a{color:var(--p2);font-weight:600}
 .lg-btn{width:100%;height:48px;border-radius:12px;font-size:15px;margin-top:6px;box-shadow:0 6px 16px rgba(30,58,138,.25)}
 .lg-btn:disabled{opacity:.7;cursor:wait}.lg-note{text-align:center;margin:18px 0 0;font-size:12px}
 @media(max-width:900px){.lg{grid-template-columns:1fr}.lg-art{display:none}.lg-m{display:grid;margin:0 0 16px}.lg-side{min-height:100vh;align-items:center}}
+
+/* ===== Kecepatan & kelas/mapel ===== */
+#bar{position:fixed;top:0;left:0;height:3px;width:0;opacity:0;background:linear-gradient(90deg,#2563EB,#0D9488);z-index:99;transition:width .25s,opacity .3s}
+#bar.on{opacity:1;width:85%;transition:width 6s cubic-bezier(.1,.7,.2,1)}
+.sk{height:260px;background:linear-gradient(90deg,#F1F5F9 25%,#E8EEF6 50%,#F1F5F9 75%);background-size:200% 100%;animation:sh 1.1s infinite}@keyframes sh{to{background-position:-200% 0}}
+.chips{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.kc{display:flex;flex-direction:column;padding:10px 16px;border-radius:12px;background:var(--inb);border:1px solid #BFDBFE;color:var(--p);min-width:110px}.kc:hover{background:#DBEAFE}.kc small{color:var(--mu)}
+.mi{display:inline-flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;border:1px solid var(--bd);border-radius:99px;background:#fff}.mi small{color:var(--mu)}.mi .ghost{padding:2px 6px}
+.mf{display:flex;gap:8px;margin:14px 0}.mf input{flex:1}
+.chkg{margin-bottom:14px}.chkg>div{margin-top:8px;padding:10px 12px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);max-height:150px;overflow:auto}
+.ck{display:inline-flex;gap:6px;align-items:center;margin:0 16px 8px 0;font-weight:400;font-size:13px;cursor:pointer}.ck input{width:auto;height:auto;margin:0}

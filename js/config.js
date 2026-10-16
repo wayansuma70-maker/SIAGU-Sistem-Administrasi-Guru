@@ -3,4 +3,4 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbz9aomaUlndpXZtJRHVs2b1
 const TAHUN_AJARAN = '2024/2025';
 const SEMESTER = 'Genap';
 const KKM = 75;
-const API_VERSION = 3;
+const API_VERSION = 4;
