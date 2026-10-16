@@ -31,7 +31,17 @@ const pred = v => v >= 90 ? 'A' : v >= 85 ? 'A-' : v >= 80 ? 'B+' : v >= 75 ? 'B
 $('#loginForm').addEventListener('submit', safe(async e => {
   e.preventDefault();
   const r = await api('login', { email: $('#lEmail').value, pin: $('#lPin').value });
-  S = r.data; localStorage.setItem('siagu', JSON.stringify(S)); boot();
+  S = r.data; localStorage.setItem('siagu', JSON.stringify(S)); async function cekBackend() {
+  try {
+    const j = await (await fetch(GAS_URL)).json();
+    if (!(j.version >= API_VERSION)) throw 0;
+  } catch (e) {
+    $('#warn').hidden = false;
+    $('#warn').innerHTML = '⚠️ <b>Backend Google Apps Script belum diperbarui</b> atau belum bisa dijangkau, sehingga menu Profil, Edit/Hapus, dan Import belum berfungsi. Buka Apps Script → <b>Deploy → Manage deployments → ✏️ → Version: New version → Deploy</b>, lalu muat ulang halaman ini (Ctrl+Shift+R).';
+  }
+}
+boot();
+cekBackend();
 }));
 function logout() { S = null; kelasCache = null; localStorage.removeItem('siagu'); boot(); }
 $('#out').onclick = logout;
@@ -321,4 +331,14 @@ async function pRekap() {
   });
 }
 
+async function cekBackend() {
+  try {
+    const j = await (await fetch(GAS_URL)).json();
+    if (!(j.version >= API_VERSION)) throw 0;
+  } catch (e) {
+    $('#warn').hidden = false;
+    $('#warn').innerHTML = '⚠️ <b>Backend Google Apps Script belum diperbarui</b> atau belum bisa dijangkau, sehingga menu Profil, Edit/Hapus, dan Import belum berfungsi. Buka Apps Script → <b>Deploy → Manage deployments → ✏️ → Version: New version → Deploy</b>, lalu muat ulang halaman ini (Ctrl+Shift+R).';
+  }
+}
 boot();
+cekBackend();
