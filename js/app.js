@@ -21,7 +21,7 @@ async function api(action, data = {}) {
   } finally { w ? busy(false) : bar(0); }
 }
 const safe = fn => async (...a) => { try { await fn(...a); } catch (e) { notif(e.message || 'Terjadi kesalahan', 'err'); } };
-let pend = 0, curPage = '', MEM = {}, BOOT = null, bootP = null, bootSeq = 0;
+let pend = 0, curPage = '', PRE = {}, MEM = {}, BOOT = null, bootP = null, bootSeq = 0;
 function bar(n) { pend += n ? 1 : -1; $('#bar').classList.toggle('on', pend > 0); }
 // Data referensi (kelas, mapel, siswa) diambil sekali, disimpan di memori & browser → pindah menu instan
 function bootData(force) {
@@ -65,7 +65,7 @@ function logout() { S = null; kelasCache = null; BOOT = null; MEM = {}; localSto
 $('#out').onclick = logout;
 $('#menu').onclick = () => $('#side').classList.toggle('open');
 
-const PAGES = { dashboard: ['🏠 Dashboard', pDash], jurnal: ['📖 Jurnal Mengajar & Presensi', pJurnal], nilai: ['📝 Penilaian Siswa / Gradebook', pNilai], siswa: ['🎓 Data Siswa & Direktori', pSiswa], rekap: ['🖨️ Rekap & Cetak PDF', pRekap], profil: ['👤 Profil & Sekolah', pProfil], pengaturan: ['⚙️ Pengaturan Data', pPengaturan] };
+const PAGES = { dashboard: ['🏠 Dashboard', pDash], jurnal: ['📖 Jurnal Mengajar & Presensi', pJurnal], jadwal: ['📅 Jadwal Mengajar', pJadwal], nilai: ['📝 Penilaian Siswa / Gradebook', pNilai], siswa: ['🎓 Data Siswa & Direktori', pSiswa], rekap: ['🖨️ Rekap & Cetak PDF', pRekap], profil: ['👤 Profil & Sekolah', pProfil], pengaturan: ['⚙️ Pengaturan Data', pPengaturan] };
 
 function boot() {
   $('#login').hidden = !!S; $('#app').hidden = !S;
@@ -79,7 +79,7 @@ function boot() {
 const route = safe(async () => {
   if (!S) return;
   const adm = S.user.peran === 'Admin';
-  let k = location.hash.slice(1) || 'dashboard'; if (!PAGES[k] || (k === 'pengaturan' && !adm)) k = 'dashboard';
+  let [k, q] = (location.hash.slice(1) || 'dashboard').split('?'); PRE = Object.fromEntries(new URLSearchParams(q || '')); if (!PAGES[k] || (k === 'pengaturan' && !adm)) k = 'dashboard';
   const p = PAGES[k]; curPage = k;
   $('#view').innerHTML = '<div class="card sk"></div>';
   $('#nav').innerHTML = Object.entries(PAGES).filter(([id]) => id !== 'pengaturan' || adm).map(([id, v]) => `<a href="#${id}" class="${id === k ? 'on' : ''}">${v[0]}</a>`).join('');
@@ -97,6 +97,9 @@ async function pDash() {
     $('#view').innerHTML = `
     <section class="hero"><div><h1>Selamat ${sapa}, ${esc(S.user.nama)} 👋</h1><p>${d.jurnalHariIni} jurnal sudah diisi hari ini.</p></div>
       <div><a class="btn white" href="#jurnal">+ Isi Jurnal Sekarang</a> <a class="btn out" href="#rekap">Rekap</a></div></section>
+    <div class="card sec"><div class="pg" style="margin:0 0 12px"><h2>📅 Jadwal Mengajar Hari Ini (${esc(d.hariIni || '')})</h2><a class="btn out sm" href="#jadwal">Lihat Semua</a></div>
+      ${(d.jadwalHariIni || []).map(x => { const now = hhmm(), live = !x.terisi && now >= x.mulai && now < x.selesai;
+        return jdRow(x, x.terisi ? '<span class="chip H">Sudah diisi</span>' : `${live ? '<span class="chip S">Berlangsung</span>' : '<span class="chip I">Belum diisi</span>'} <a class="btn sm" href="${jamHref(x)}">Mulai Jurnal</a>`).replace('class="jd"', `class="jd ${live ? 'live' : ''}"`); }).join('') || '<span class="mu">Tidak ada jadwal mengajar hari ini.</span>'}</div>
     <div class="card sec"><h2>${adm ? '🏫 Kelas & Mata Pelajaran Sekolah' : '🏫 Kelas & Mata Pelajaran yang Saya Ampu'}</h2>
       <div class="chips" style="margin-top:14px">${p.kelas.map(c => `<a class="kc" href="#jurnal"><b>${esc(c.nama)}</b><small>${c.siswa} siswa</small></a>`).join('') || `<span class="mu">${adm ? 'Belum ada kelas. Tambahkan di Pengaturan Data → Kelas & Mapel.' : 'Belum ada kelas yang diampu. Hubungi admin untuk menetapkannya.'}</span>`}</div>
       <p class="mu" style="margin:16px 0 8px"><b>Mata pelajaran</b></p>
@@ -132,9 +135,9 @@ async function pJurnal() {
   $('#view').innerHTML = `<div class="pg"><div><h1>Formulir Jurnal Mengajar & Presensi</h1><p class="mu">Isi proses pembelajaran, presensi, dan unggah foto kegiatan.</p></div></div>
   <form id="jf"><div class="card sec"><h2>1. Informasi Pembelajaran</h2><div class="row2">
     <label>Tanggal<input type="date" id="jt" value="${today()}" required></label>
-    <label>Kelas<select id="jk">${opts(kl)}</select></label>
-    <label>Mata Pelajaran${mp.length ? `<select id="jm">${opts(mp)}</select>` : '<input id="jm" required>'}</label>
-    <label>Jam Pelajaran<input id="jj" placeholder="Jam ke 1-2 (07.30-09.00)" required></label></div>
+    <label>Kelas<select id="jk">${opts(kl, PRE.kelas)}</select></label>
+    <label>Mata Pelajaran${mp.length ? `<select id="jm">${opts(mp, PRE.mapel)}</select>` : '<input id="jm" required>'}</label>
+    <label>Jam Pelajaran<input id="jj" placeholder="Jam ke 1-2 (07.30-09.00)" value="${esc(PRE.jam || '')}" required></label></div>
     <label>Materi / Pokok Bahasan<input id="jmt" required></label>
     <div class="row2"><label>Kegiatan Pembelajaran<textarea id="jg" required></textarea></label><label>Catatan / Hambatan (opsional)<textarea id="jc"></textarea></label></div></div>
   <div class="card sec"><h2>2. Dokumentasi Kegiatan</h2><div class="drop" id="dz">📷 Pilih foto kegiatan (maks. 3, dikompres otomatis)</div>
@@ -148,7 +151,7 @@ async function pJurnal() {
       <td><input data-k="${s.nis}" value="${esc(pres[s.nis].k)}" placeholder="-"></td></tr>`).join('')}</table>` : '<p class="mu">Belum ada siswa aktif di kelas ini. Admin dapat menambahkannya di Pengaturan Data.</p>';
   };
   const loadS = () => { siswa = B.siswa.filter(s => s.kelas === $('#jk').value && s.status !== 'Nonaktif'); pres = {}; siswa.forEach(s => pres[s.nis] = { s: 'H', k: '' }); drawP(); };
-  $('#jk').onchange = loadS; loadS();
+  $('#jk').onchange = loadS; loadS(); PRE = {};
   $('#pt').onclick = e => { const b = e.target.closest('button[data-s]'); if (b) { pres[b.dataset.n].s = b.dataset.s; drawP(); } };
   $('#pt').oninput = e => { if (e.target.dataset.k) pres[e.target.dataset.k].k = e.target.value; };
   $('#allH').onclick = () => { siswa.forEach(s => pres[s.nis].s = 'H'); drawP(); };
@@ -279,6 +282,58 @@ async function guruPanel(el, fresh) {
     else if (confirm(`Hapus guru ${g.nama} (${g.email})? Tindakan ini tidak dapat dibatalkan.`)) { notif((await api('hapusGuru', { email: g.email })).message); await guruPanel(el, true); }
   });
 }
+// ---------- Jadwal Pelajaran ----------
+const HARI = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+const hhmm = () => new Date().toTimeString().slice(0, 5);
+const jamHref = x => `#jurnal?kelas=${encodeURIComponent(x.kelas)}&mapel=${encodeURIComponent(x.mapel)}&jam=${encodeURIComponent(x.mulai + '-' + x.selesai)}`;
+const jdRow = (x, act) => `<div class="jd"><div class="jt">${esc(x.mulai)}<small>${esc(x.selesai)}</small></div><div class="jb"><b>${esc(x.mapel)}</b><br><span class="mu">${esc(x.kelas)}${x.ruang ? ' • ' + esc(x.ruang) : ''}</span></div>${act || ''}</div>`;
+
+// Guru: jadwal mingguan milik sendiri
+async function pJadwal() {
+  const hariIni = HARI[(new Date().getDay() + 6) % 7];
+  const draw = d => {
+    $('#view').innerHTML = `<div class="pg"><div><h1>Jadwal Mengajar</h1><p class="mu">Jadwal ditetapkan oleh admin. Pada jadwal hari ini, klik "Isi Jurnal" untuk mengisi jurnal dengan cepat.</p></div></div>
+    <div class="grid2">${HARI.map(h => { const L = d.jadwal.filter(x => x.hari === h);
+      return `<div class="card ${h === hariIni ? 'today' : ''}"><h2>${h} ${h === hariIni ? '<span class="badge">Hari ini</span>' : ''}</h2><div style="margin-top:12px">${
+        L.map(x => jdRow(x, h === hariIni ? `<a class="btn sm" href="${jamHref(x)}">Isi Jurnal</a>` : '')).join('') || '<span class="mu">Tidak ada jadwal.</span>'}</div></div>`; }).join('')}</div>`;
+  };
+  await swr('getJadwal', {}, draw, () => curPage === 'jadwal');
+}
+
+// Admin: atur jadwal tiap guru
+async function jadwalPanel(el, sel) {
+  const guru = (await api('getGuru', {})).data.guru.filter(g => g.status === 'Aktif');
+  if (!guru.length) { el.innerHTML = '<div class="card"><p class="mu">Belum ada guru aktif. Tambahkan di tab Data Guru.</p></div>'; return; }
+  const email = guru.some(g => g.email === sel) ? sel : guru[0].email, g = guru.find(x => x.email === email);
+  const L = (await api('getJadwal', { email })).data.jadwal;
+  el.innerHTML = `<div class="card"><div class="row2"><label>Pilih Guru<select id="jg">${guru.map(x => `<option value="${esc(x.email)}" ${x.email === email ? 'selected' : ''}>${esc(x.nama)}</option>`).join('')}</select></label>
+    <div style="align-self:end;margin-bottom:12px"><button class="btn" id="jadd">+ Tambah Jadwal</button></div></div>
+    <p class="mu">Kelas diampu: <b>${esc(g.kelas || '-')}</b> • Mapel diampu: <b>${esc(g.mapel || '-')}</b></p>
+    <div class="scroll"><table><tr><th>Hari</th><th>Jam</th><th>Kelas</th><th>Mata Pelajaran</th><th>Ruang</th><th>Aksi</th></tr>${L.map(x =>
+      `<tr><td>${esc(x.hari)}</td><td>${esc(x.mulai)}–${esc(x.selesai)}</td><td>${esc(x.kelas)}</td><td>${esc(x.mapel)}</td><td>${esc(x.ruang)}</td><td style="white-space:nowrap">${actBtns(x.id)}</td></tr>`).join('')
+      || '<tr><td colspan="6" class="mu">Belum ada jadwal untuk guru ini.</td></tr>'}</table></div></div>`;
+  const form = x => {
+    const kl = splitL(g.kelas), mp = splitL(g.mapel);
+    if (!kl.length || !mp.length) return notif('Tetapkan dulu kelas & mapel yang diampu guru ini (tab Data Guru → Edit).', 'err');
+    modal(x ? 'Edit Jadwal' : 'Tambah Jadwal', `<p class="mu" style="margin-top:0">Guru: <b>${esc(g.nama)}</b></p><div class="row2">
+      <label>Hari<select name="hari">${opts(HARI, x?.hari)}</select></label><label>Ruang (opsional)<input name="ruang" value="${esc(x?.ruang)}" placeholder="R.101 / Lab 2"></label>
+      <label>Jam Mulai<input type="time" name="mulai" required value="${esc(x?.mulai || '07:00')}"></label><label>Jam Selesai<input type="time" name="selesai" required value="${esc(x?.selesai || '08:30')}"></label>
+      <label>Kelas<select name="kelas">${opts(kl, x?.kelas)}</select></label><label>Mata Pelajaran<select name="mapel">${opts(mp, x?.mapel)}</select></label></div>`,
+    async f => {
+      const e = f.elements, r = await api('saveJadwal', { id: x ? x.id : '', email, hari: e.hari.value, mulai: e.mulai.value, selesai: e.selesai.value, kelas: e.kelas.value, mapel: e.mapel.value, ruang: e.ruang.value });
+      notif(r.message); await jadwalPanel(el, email);
+    });
+  };
+  $('#jg').onchange = safe(() => jadwalPanel(el, $('#jg').value));
+  $('#jadd').onclick = () => form();
+  $('table', el).onclick = safe(async e => {
+    const b = e.target.closest('[data-a]'); if (!b) return;
+    const x = L.find(j => j.id === b.dataset.i);
+    if (b.dataset.a === 'e') form(x);
+    else if (confirm(`Hapus jadwal ${x.hari} ${x.mulai}–${x.selesai} (${x.mapel}, ${x.kelas})?`)) { notif((await api('hapusJadwal', { id: x.id })).message); await jadwalPanel(el, email); }
+  });
+}
+
 // ---------- Kelas & Mapel (master data, Admin) ----------
 const splitL = v => String(v || '').split(',').map(s => s.trim()).filter(Boolean);
 const chk = (n, t, all, sel) => { const s = splitL(sel); return `<div class="chkg"><b>${t}</b><div>${all.length ? all.map(x => `<label class="ck"><input type="checkbox" name="${n}" value="${esc(x)}" ${s.includes(x) ? 'checked' : ''}> ${esc(x)}</label>`).join('') : '<span class="mu">Belum ada data. Tambahkan di tab Kelas & Mapel.</span>'}</div></div>`; };
@@ -299,8 +354,8 @@ async function masterPanel(el) {
 
 async function pPengaturan() {
   $('#view').innerHTML = `<div class="pg"><div><h1>Pengaturan Data</h1><p class="mu">Kelola data siswa dan guru: tambah, ubah, hapus, dan unggah berkas PDF.</p></div></div>
-    <div class="tabs"><button class="btn" data-t="s">🎓 Data Siswa</button><button class="btn out" data-t="g">👩‍🏫 Data Guru</button><button class="btn out" data-t="m">🏫 Kelas & Mapel</button><button class="btn out" data-t="x">📥 Import Excel</button></div><div id="pn"></div>`;
-  const go = async t => { $$('.tabs button').forEach(b => b.className = 'btn' + (b.dataset.t === t ? '' : ' out')); await ({ s: siswaPanel, g: guruPanel, m: masterPanel, x: importPanel }[t])($('#pn')); };
+    <div class="tabs"><button class="btn" data-t="s">🎓 Data Siswa</button><button class="btn out" data-t="g">👩‍🏫 Data Guru</button><button class="btn out" data-t="j">📅 Jadwal</button><button class="btn out" data-t="m">🏫 Kelas & Mapel</button><button class="btn out" data-t="x">📥 Import Excel</button></div><div id="pn"></div>`;
+  const go = async t => { $$('.tabs button').forEach(b => b.className = 'btn' + (b.dataset.t === t ? '' : ' out')); await ({ s: siswaPanel, g: guruPanel, j: jadwalPanel, m: masterPanel, x: importPanel }[t])($('#pn')); };
   $$('.tabs button').forEach(b => b.onclick = safe(() => go(b.dataset.t)));
   await go('s');
 }
@@ -308,6 +363,7 @@ async function pPengaturan() {
 // ---------- Import Excel & Template ----------
 const TPL = {
   siswa: { f: 'Template_Data_Siswa.xlsx', h: ['NIS', 'Nama', 'Kelas', 'JK', 'Status'], x: [['240199', 'Contoh Siswa', 'X TKJ 1', 'L', 'Aktif']], api: 'importSiswa', n: 'Siswa', info: 'NIS, Nama, Kelas wajib. JK: L/P. Status: Aktif/Nonaktif. NIS yang sudah ada akan diperbarui.' },
+  jadwal: { f: 'Template_Jadwal_Pelajaran.xlsx', h: ['Email', 'Hari', 'Mulai', 'Selesai', 'Kelas', 'Mapel', 'Ruang'], x: [['guru@sekolah.sch.id', 'Senin', '07:30', '09:00', 'X TKJ 1', 'Matematika', 'R.101']], api: 'importJadwal', n: 'Jadwal', info: 'Email guru, Hari (Senin–Sabtu), Mulai & Selesai (HH:MM), Kelas, Mapel wajib. Kelas & mapel harus sudah ditetapkan pada guru tersebut. PERHATIAN: jadwal lama guru yang ada di file akan diganti.' },
   guru: { f: 'Template_Data_Guru.xlsx', h: ['Email', 'Nama', 'Peran', 'NIP', 'Mapel', 'Kelas', 'Status', 'PIN'], x: [['guru.baru@sekolah.sch.id', 'Contoh Guru, S.Pd.', 'Guru', '198001012005011001', 'Matematika', 'X TKJ 1, X TKJ 2', 'Aktif', '123456']], api: 'importGuru', n: 'Guru', info: 'Email, Nama wajib. Peran: Guru/Admin. Kelas & Mapel dipisah koma (nama harus sama dengan Daftar Kelas/Mapel). PIN wajib untuk akun baru. Kolom kosong pada akun lama = data lama tidak diubah.' }
 };
 const needX = () => { if (typeof XLSX === 'undefined') throw new Error('Pustaka Excel belum termuat. Periksa koneksi internet lalu muat ulang.'); };
@@ -339,7 +395,7 @@ async function importPanel(el) {
 }
 
 // ---------- Profil & Sekolah ----------
-function meBox() { $('#me').innerHTML = `<b>${esc(S.user.nama)}</b><br>${esc(S.user.peran)}${S.sekolah ? '<br><span class="mu">' + esc(S.sekolah) + '</span>' : ''}<br><small class="mu">SIAGU v6</small>`; }
+function meBox() { $('#me').innerHTML = `<b>${esc(S.user.nama)}</b><br>${esc(S.user.peran)}${S.sekolah ? '<br><span class="mu">' + esc(S.sekolah) + '</span>' : ''}<br><small class="mu">SIAGU v7</small>`; }
 const saveS = () => localStorage.setItem('siagu', JSON.stringify(S));
 let KOP = null; // null | 'DEL' | {name,mime,data,prev}
 function readKop(file) {
@@ -413,7 +469,7 @@ async function pRekap() {
   });
 }
 
-const NEED_API = 6; // versi backend minimum
+const NEED_API = 7; // versi backend minimum
 async function cekBackend() {
   try {
     const j = await (await fetch(GAS_URL)).json();

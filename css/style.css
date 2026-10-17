@@ -96,3 +96,8 @@ td a{color:var(--p2);font-weight:600}
 /* ===== Kop sekolah ===== */
 .kop{margin-bottom:16px}.kopbox{border:1px dashed #CBD5E1;border-radius:10px;padding:10px;background:var(--bg);margin:8px 0;color:var(--mu);text-align:center;font-size:12px}
 .kopbox img{max-width:100%;display:block;margin:auto}.kop input[type=file]{width:auto;height:auto;padding:8px;margin:0 8px 6px 0}
+
+/* ===== Jadwal ===== */
+.jd{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--bd);border-radius:12px;margin-bottom:8px;background:#fff;flex-wrap:wrap}
+.jd.live{border-left:4px solid #F59E0B;background:var(--wrb)}.jt{font-weight:700;color:var(--p);min-width:56px}.jt small{display:block;font-weight:400;color:var(--mu)}.jb{flex:1;min-width:120px}
+.card.today{border-color:#93C5FD;box-shadow:0 0 0 3px rgba(37,99,235,.08)}
