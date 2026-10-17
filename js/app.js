@@ -339,8 +339,24 @@ async function importPanel(el) {
 }
 
 // ---------- Profil & Sekolah ----------
-function meBox() { $('#me').innerHTML = `<b>${esc(S.user.nama)}</b><br>${esc(S.user.peran)}${S.sekolah ? '<br><span class="mu">' + esc(S.sekolah) + '</span>' : ''}<br><small class="mu">SIAGU v5</small>`; }
+function meBox() { $('#me').innerHTML = `<b>${esc(S.user.nama)}</b><br>${esc(S.user.peran)}${S.sekolah ? '<br><span class="mu">' + esc(S.sekolah) + '</span>' : ''}<br><small class="mu">SIAGU v6</small>`; }
 const saveS = () => localStorage.setItem('siagu', JSON.stringify(S));
+let KOP = null; // null | 'DEL' | {name,mime,data,prev}
+function readKop(file) {
+  return new Promise((res, rej) => {
+    if (!/^image\/(png|jpeg)$/.test(file.type)) return rej(new Error('Kop harus berupa gambar PNG atau JPG.'));
+    const fr = new FileReader(), img = new Image();
+    fr.onload = () => { img.onload = () => {
+      const r = Math.min(1, 1400 / img.width), c = document.createElement('canvas'); c.width = img.width * r; c.height = img.height * r;
+      const x = c.getContext('2d'); let mime = file.type, u;
+      const paint = () => { if (mime === 'image/jpeg') { x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); } x.drawImage(img, 0, 0, c.width, c.height); return c.toDataURL(mime, .85); };
+      u = paint(); if (u.length > 880000) { mime = 'image/jpeg'; u = paint(); }
+      if (u.length > 880000) return rej(new Error('Gambar kop terlalu besar. Perkecil ukurannya.'));
+      res({ name: 'kop', mime, data: u.split(',')[1], prev: u });
+    }; img.onerror = () => rej(new Error('Gambar tidak dapat dibaca.')); img.src = fr.result; };
+    fr.readAsDataURL(file);
+  });
+}
 async function pProfil() {
   const adm = S.user.peran === 'Admin', dis = adm ? '' : 'disabled';
   await swr('getProfil', {}, d => { const me = d.me, sk = d.sekolah;
@@ -357,7 +373,16 @@ async function pProfil() {
     <label>Alamat Sekolah<textarea name="al" ${dis}>${esc(sk.alamat)}</textarea></label>
     <label>Nama Kepala Sekolah<input name="kp" ${dis} value="${esc(sk.kepsek)}"></label>
     <label>NIP Kepala Sekolah<input name="nk" ${dis} value="${esc(sk.nip_kepsek)}"></label>
+    <div class="kop"><b>Kop Sekolah (gambar)</b><p class="mu" style="margin:4px 0">Dicetak di bagian atas semua PDF. Disarankan PNG/JPG, lebar ≥ 1200 px, berisi logo, nama, dan alamat sekolah.</p>
+      <div id="kopPrev" class="kopbox">${sk.kop_id ? 'Memuat kop...' : 'Belum ada kop. PDF memakai nama & alamat sekolah berupa teks.'}</div>
+      ${adm ? `<input type="file" id="kopFile" accept="image/png,image/jpeg">${sk.kop_id ? '<button type="button" class="btn out sm" id="kopDel">Hapus Kop</button>' : ''}` : ''}</div>
     ${adm ? '<button class="btn">Simpan Profil Sekolah</button>' : '<p class="mu">Hanya Admin yang dapat mengubah profil sekolah.</p>'}</form></div>`;
+  KOP = null;
+  if (sk.kop_id) swr('getKop', {}, k => { const b = $('#kopPrev'); if (b && !KOP) b.innerHTML = k.kop ? `<img src="${k.kop}" alt="Kop sekolah">` : 'Kop tidak dapat dimuat.'; }, () => curPage === 'profil').catch(() => {});
+  if (adm) {
+    $('#kopFile').onchange = safe(async e => { const f = e.target.files[0]; if (!f) return; KOP = await readKop(f); $('#kopPrev').innerHTML = `<img src="${KOP.prev}" alt="Kop baru">`; });
+    const del = $('#kopDel'); if (del) del.onclick = () => { KOP = 'DEL'; $('#kopPrev').textContent = 'Kop akan dihapus setelah Anda menekan "Simpan Profil Sekolah".'; };
+  }
   $('#pf').onsubmit = safe(async e => {
     e.preventDefault(); const f = e.target.elements;
     const r = await api('saveProfil', { nama: f.nama.value, nip: f.nip.value, pinLama: f.pl.value, pinBaru: f.pb.value });
@@ -365,8 +390,9 @@ async function pProfil() {
   });
   if (adm) $('#sf').onsubmit = safe(async e => {
     e.preventDefault(); const f = e.target.elements;
-    const r = await api('saveSekolah', { nama_sekolah: f.ns.value, alamat: f.al.value, kepsek: f.kp.value, nip_kepsek: f.nk.value });
-    S.sekolah = r.data.nama_sekolah; saveS(); meBox(); notif(r.message);
+    const k = KOP && KOP !== 'DEL' ? { name: KOP.name, mime: KOP.mime, data: KOP.data } : undefined;
+    const r = await api('saveSekolah', { nama_sekolah: f.ns.value, alamat: f.al.value, kepsek: f.kp.value, nip_kepsek: f.nk.value, kop: k, hapusKop: KOP === 'DEL' });
+    S.sekolah = r.data.nama_sekolah; saveS(); meBox(); notif(r.message); KOP = null; await pProfil();
   });
   }, () => curPage === 'profil');
 }
@@ -387,7 +413,7 @@ async function pRekap() {
   });
 }
 
-const NEED_API = 5; // versi backend minimum
+const NEED_API = 6; // versi backend minimum
 async function cekBackend() {
   try {
     const j = await (await fetch(GAS_URL)).json();

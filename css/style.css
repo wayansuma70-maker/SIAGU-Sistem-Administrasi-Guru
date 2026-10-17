@@ -92,3 +92,7 @@ td a{color:var(--p2);font-weight:600}
 .mf{display:flex;gap:8px;margin:14px 0}.mf input{flex:1}
 .chkg{margin-bottom:14px}.chkg>div{margin-top:8px;padding:10px 12px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);max-height:150px;overflow:auto}
 .ck{display:inline-flex;gap:6px;align-items:center;margin:0 16px 8px 0;font-weight:400;font-size:13px;cursor:pointer}.ck input{width:auto;height:auto;margin:0}
+
+/* ===== Kop sekolah ===== */
+.kop{margin-bottom:16px}.kopbox{border:1px dashed #CBD5E1;border-radius:10px;padding:10px;background:var(--bg);margin:8px 0;color:var(--mu);text-align:center;font-size:12px}
+.kopbox img{max-width:100%;display:block;margin:auto}.kop input[type=file]{width:auto;height:auto;padding:8px;margin:0 8px 6px 0}
