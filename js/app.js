@@ -3,12 +3,14 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const today = () => new Date().toLocaleDateString('sv-SE');
+const eom = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth() + 1, 0).toLocaleDateString('sv-SE'); };   // akhir bulan ini
 const W = { TP1: .2, TP2: .2, UH1: .25, UTS: .35 };
 let S = JSON.parse(localStorage.getItem('siagu') || 'null');
 let kelasCache = null;
 
 // ---------- Helpers ----------
-function notif(m, t = 'ok') { const n = $('#notif'); n.textContent = m; n.className = 'notif ' + t + ' show'; setTimeout(() => n.classList.remove('show'), 3500); }
+let notifT = null;
+function notif(m, t = 'ok') { const n = $('#notif'); n.textContent = m; n.className = 'notif ' + t + ' show'; clearTimeout(notifT); notifT = setTimeout(() => n.classList.remove('show'), t === 'err' ? 9000 : 4500); }
 function busy(b) { $('#loading').style.display = b ? 'flex' : 'none'; }
 async function api(action, data = {}) {
   const w = /^(save|hapus|import|rekap|login)/.test(action); w ? busy(true) : bar(1);
@@ -65,7 +67,7 @@ function logout() { S = null; kelasCache = null; BOOT = null; MEM = {}; localSto
 $('#out').onclick = logout;
 $('#menu').onclick = () => $('#side').classList.toggle('open');
 
-const PAGES = { dashboard: ['🏠 Dashboard', pDash], jurnal: ['📖 Jurnal Mengajar & Presensi', pJurnal], jadwal: ['📅 Jadwal Mengajar', pJadwal], nilai: ['📝 Penilaian Siswa / Gradebook', pNilai], siswa: ['🎓 Data Siswa & Direktori', pSiswa], rekap: ['🖨️ Rekap & Cetak PDF', pRekap], profil: ['👤 Profil & Sekolah', pProfil], pengaturan: ['⚙️ Pengaturan Data', pPengaturan] };
+const PAGES = { dashboard: ['🏠 Dashboard', pDash], jurnal: ['📖 Jurnal Mengajar & Presensi', pJurnal], riwayat: ['🗂️ Riwayat Jurnal', pRiwayat], jadwal: ['📅 Jadwal Pelajaran', pJadwal], nilai: ['📝 Penilaian Siswa / Gradebook', pNilai], siswa: ['🎓 Data Siswa & Direktori', pSiswa], rekap: ['🖨️ Rekap & Cetak PDF', pRekap], profil: ['👤 Profil & Sekolah', pProfil], pengaturan: ['⚙️ Pengaturan Data', pPengaturan] };
 
 function boot() {
   $('#login').hidden = !!S; $('#app').hidden = !S;
@@ -142,16 +144,26 @@ async function pJurnal() {
     <div class="row2"><label>Kegiatan Pembelajaran<textarea id="jg" required></textarea></label><label>Catatan / Hambatan (opsional)<textarea id="jc"></textarea></label></div></div>
   <div class="card sec"><h2>2. Dokumentasi Kegiatan</h2><div class="drop" id="dz">📷 Pilih foto kegiatan (maks. 3, dikompres otomatis)</div>
     <input type="file" id="ff" accept="image/*" multiple hidden><div class="thumbs" id="th"></div></div>
-  <div class="card sec"><div class="pg"><h2>3. Presensi Roll-Call</h2><button type="button" class="btn sm" id="allH">Tandai Semua Hadir</button></div>
+  <div class="card sec"><div class="pg"><div><h2>3. Presensi Roll-Call</h2><span id="pcnt" class="mu"></span></div><div><button type="button" class="btn out sm" id="rsw">🔄 Muat Ulang Siswa</button> <button type="button" class="btn sm" id="allH">Tandai Semua Hadir</button></div></div>
     <div id="pt" class="scroll"></div></div>
   <div class="card" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><label style="margin:0"><input type="checkbox" id="je" checked style="width:auto;height:auto"> Kirim tanda terima ke email guru</label><span class="grow"></span><button class="btn" type="submit">Simpan Jurnal & Kirim Presensi</button></div></form>`;
   const drawP = () => {
     $('#pt').innerHTML = siswa.length ? `<table><tr><th>No</th><th>Nama & NIS</th><th>Status</th><th>Keterangan</th></tr>${siswa.map((s, i) => `<tr><td>${i + 1}</td><td><b>${esc(s.nama)}</b><br><small class="mu">NIS ${s.nis}</small></td>
       <td><span class="sb">${['H', 'S', 'I', 'A'].map(x => `<button type="button" data-n="${s.nis}" data-s="${x}" class="${pres[s.nis].s === x ? 'on' : ''}">${x}</button>`).join('')}</span></td>
-      <td><input data-k="${s.nis}" value="${esc(pres[s.nis].k)}" placeholder="-"></td></tr>`).join('')}</table>` : '<p class="mu">Belum ada siswa aktif di kelas ini. Admin dapat menambahkannya di Pengaturan Data.</p>';
+      <td><input data-k="${s.nis}" value="${esc(pres[s.nis].k)}" placeholder="-"></td></tr>`).join('')}</table>` : `<div class="warnbox">⚠️ Belum ada siswa aktif di kelas <b>${esc($('#jk').value)}</b>, sehingga presensi akan kosong. Minta admin menambahkan siswa (Pengaturan Data → Data Siswa atau Import Excel), lalu klik <b>Muat Ulang Siswa</b>.</div>`;
+    $('#pcnt').textContent = siswa.length + ' siswa aktif';
   };
   const loadS = () => { siswa = B.siswa.filter(s => s.kelas === $('#jk').value && s.status !== 'Nonaktif'); pres = {}; siswa.forEach(s => pres[s.nis] = { s: 'H', k: '' }); drawP(); };
   $('#jk').onchange = loadS; loadS(); PRE = {};
+  // Segarkan daftar siswa dari server (admin mungkin baru menambah/mengubah data siswa)
+  const refresh = async manual => {
+    const nb = await bootData(true); if (!$('#pt')) return;
+    const before = JSON.stringify(B.siswa); B.siswa = nb.siswa;
+    if (JSON.stringify(nb.siswa) !== before) { const prev = pres; siswa = B.siswa.filter(s => s.kelas === $('#jk').value && s.status !== 'Nonaktif'); pres = {}; siswa.forEach(s => pres[s.nis] = prev[s.nis] || { s: 'H', k: '' }); drawP(); }
+    if (manual) notif(`Daftar siswa dimuat ulang: ${siswa.length} siswa di kelas ini.`);
+  };
+  refresh(false).catch(() => {});
+  $('#rsw').onclick = safe(() => refresh(true));
   $('#pt').onclick = e => { const b = e.target.closest('button[data-s]'); if (b) { pres[b.dataset.n].s = b.dataset.s; drawP(); } };
   $('#pt').oninput = e => { if (e.target.dataset.k) pres[e.target.dataset.k].k = e.target.value; };
   $('#allH').onclick = () => { siswa.forEach(s => pres[s.nis].s = 'H'); drawP(); };
@@ -159,9 +171,10 @@ async function pJurnal() {
   $('#ff').onchange = safe(async e => { fotos = await Promise.all([...e.target.files].slice(0, 3).map(compress)); $('#th').innerHTML = fotos.map(f => `<img src="${f.prev}">`).join(''); });
   $('#jf').onsubmit = safe(async e => {
     e.preventDefault();
+    if (!siswa.length && !confirm('Belum ada siswa terdaftar di kelas ini, sehingga presensi akan kosong. Tetap simpan jurnal?')) return;
     const data = { tanggal: $('#jt').value, kelas: $('#jk').value, mapel: $('#jm').value, jam: $('#jj').value, materi: $('#jmt').value, kegiatan: $('#jg').value, catatan: $('#jc').value,
       kirimEmail: $('#je').checked, fotos: fotos.map(({ name, mime, data }) => ({ name, mime, data })), presensi: siswa.map(s => ({ nis: s.nis, status: pres[s.nis].s, ket: pres[s.nis].k })) };
-    const r = await api('saveJurnal', data); notif(r.message); location.hash = '#dashboard';
+    const r = await api('saveJurnal', data); notif(`${r.message} Presensi: ${r.data.presensi} siswa • Foto: ${r.data.foto}`); location.hash = '#dashboard';
   });
 }
 
@@ -206,6 +219,7 @@ function modal(title, body, onSave) {
   const f = $('form', o), close = () => o.remove();
   $('[data-x]', o).onclick = close;
   f.onsubmit = safe(async e => { e.preventDefault(); await onSave(f); close(); });
+  return f;
 }
 function readPdf(i) {
   return new Promise((res, rej) => {
@@ -282,6 +296,29 @@ async function guruPanel(el, fresh) {
     else if (confirm(`Hapus guru ${g.nama} (${g.email})? Tindakan ini tidak dapat dibatalkan.`)) { notif((await api('hapusGuru', { email: g.email })).message); await guruPanel(el, true); }
   });
 }
+// ---------- Riwayat Jurnal ----------
+async function pRiwayat() {
+  const B = await bootData(), adm = S.user.peran === 'Admin', d0 = new Date(); d0.setDate(1);
+  $('#view').innerHTML = `<div class="pg"><div><h1>Riwayat Jurnal</h1><p class="mu">${adm ? 'Semua jurnal yang sudah tersimpan.' : 'Jurnal milik Anda yang sudah tersimpan.'} Pakai halaman ini untuk memastikan jurnal dan presensi tercatat.</p></div></div>
+  <div class="card sec"><div class="row2"><label>Dari<input type="date" id="hd" value="${d0.toLocaleDateString('sv-SE')}"></label><label>Sampai<input type="date" id="hs" value="${eom()}"></label>
+    <label>Kelas<select id="hk"><option value="">Semua Kelas</option>${opts(B.kelas)}</select></label><div style="align-self:end;margin-bottom:12px"><button class="btn" id="hc">Tampilkan</button></div></div></div>
+  <div class="card scroll" id="hl"></div>`;
+  const load = safe(async () => {
+    const d = (await api('listJurnal', { dari: $('#hd').value, sampai: $('#hs').value, kelas: $('#hk').value })).data;
+    $('#hl').innerHTML = `<p class="mu">${d.total} jurnal${d.total > d.jurnal.length ? ' (menampilkan 300 terbaru)' : ''}</p><table><tr><th>Tanggal</th>${adm ? '<th>Guru</th>' : ''}<th>Kelas</th><th>Mapel</th><th>Jam</th><th>Materi</th><th>Presensi</th><th>Foto</th><th>Aksi</th></tr>${d.jurnal.map(j =>
+      `<tr><td>${esc(j.tanggal)}</td>${adm ? `<td>${esc(j.guru)}</td>` : ''}<td>${esc(j.kelas)}</td><td>${esc(j.mapel)}</td><td>${esc(j.jam)}</td><td>${esc(j.materi)}</td>
+      <td>${j.presensi ? `H:${j.presensi.H} S:${j.presensi.S} I:${j.presensi.I} A:${j.presensi.A}` : '<span class="chip S">Belum ada presensi</span>'}</td><td>${j.foto ? '📷 ' + j.foto : '-'}</td>
+      <td><button class="ghost" style="color:var(--er)" data-del="${esc(j.id)}">🗑️ Hapus</button></td></tr>`).join('') || `<tr><td colspan="${adm ? 9 : 8}" class="mu">Belum ada jurnal pada periode ini.</td></tr>`}</table>`;
+  });
+  $('#hc').onclick = load;
+  $('#hl').onclick = safe(async e => {
+    const b = e.target.closest('[data-del]'); if (!b) return;
+    if (!confirm('Hapus jurnal ini beserta presensi dan fotonya? Tindakan ini tidak dapat dibatalkan.')) return;
+    notif((await api('hapusJurnal', { id: b.dataset.del })).message); await load();
+  });
+  load();
+}
+
 // ---------- Jadwal Pelajaran ----------
 const HARI = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const hhmm = () => new Date().toTimeString().slice(0, 5);
@@ -290,6 +327,10 @@ const jdRow = (x, act) => `<div class="jd"><div class="jt">${esc(x.mulai)}<small
 
 // Guru: jadwal mingguan milik sendiri
 async function pJadwal() {
+  if (S.user.peran === 'Admin') {
+    $('#view').innerHTML = '<div class="pg"><div><h1>Jadwal Pelajaran</h1><p class="mu">Atur jadwal mengajar semua guru: tambah, ubah, dan hapus. Jadwal yang bentrok otomatis ditolak.</p></div></div><div id="pn"></div>';
+    return jadwalPanel($('#pn'));
+  }
   const hariIni = HARI[(new Date().getDay() + 6) % 7];
   const draw = d => {
     $('#view').innerHTML = `<div class="pg"><div><h1>Jadwal Mengajar</h1><p class="mu">Jadwal ditetapkan oleh admin. Pada jadwal hari ini, klik "Isi Jurnal" untuk mengisi jurnal dengan cepat.</p></div></div>
@@ -300,29 +341,36 @@ async function pJadwal() {
   await swr('getJadwal', {}, draw, () => curPage === 'jadwal');
 }
 
-// Admin: atur jadwal tiap guru
+// Admin: atur jadwal semua guru (default tampilan: semua guru)
 async function jadwalPanel(el, sel) {
   const guru = (await api('getGuru', {})).data.guru.filter(g => g.status === 'Aktif');
-  if (!guru.length) { el.innerHTML = '<div class="card"><p class="mu">Belum ada guru aktif. Tambahkan di tab Data Guru.</p></div>'; return; }
-  const email = guru.some(g => g.email === sel) ? sel : guru[0].email, g = guru.find(x => x.email === email);
-  const L = (await api('getJadwal', { email })).data.jadwal;
-  el.innerHTML = `<div class="card"><div class="row2"><label>Pilih Guru<select id="jg">${guru.map(x => `<option value="${esc(x.email)}" ${x.email === email ? 'selected' : ''}>${esc(x.nama)}</option>`).join('')}</select></label>
+  if (!guru.length) { el.innerHTML = '<div class="card"><p class="mu">Belum ada guru aktif. Tambahkan di Pengaturan Data → Data Guru.</p></div>'; return; }
+  const email = guru.some(g => g.email === sel) ? sel : '*', all = email === '*', g = guru.find(x => x.email === email);
+  const L = (await api('getJadwal', all ? { all: true } : { email })).data.jadwal;
+  el.innerHTML = `<div class="card"><div class="row2"><label>Tampilkan jadwal<select id="jg"><option value="*">Semua Guru</option>${guru.map(x => `<option value="${esc(x.email)}" ${x.email === email ? 'selected' : ''}>${esc(x.nama)}</option>`).join('')}</select></label>
     <div style="align-self:end;margin-bottom:12px"><button class="btn" id="jadd">+ Tambah Jadwal</button></div></div>
-    <p class="mu">Kelas diampu: <b>${esc(g.kelas || '-')}</b> • Mapel diampu: <b>${esc(g.mapel || '-')}</b></p>
-    <div class="scroll"><table><tr><th>Hari</th><th>Jam</th><th>Kelas</th><th>Mata Pelajaran</th><th>Ruang</th><th>Aksi</th></tr>${L.map(x =>
-      `<tr><td>${esc(x.hari)}</td><td>${esc(x.mulai)}–${esc(x.selesai)}</td><td>${esc(x.kelas)}</td><td>${esc(x.mapel)}</td><td>${esc(x.ruang)}</td><td style="white-space:nowrap">${actBtns(x.id)}</td></tr>`).join('')
-      || '<tr><td colspan="6" class="mu">Belum ada jadwal untuk guru ini.</td></tr>'}</table></div></div>`;
+    ${all ? `<p class="mu">${L.length} jadwal dari ${guru.length} guru aktif.</p>` : `<p class="mu">Kelas diampu: <b>${esc(g.kelas || '-')}</b> • Mapel diampu: <b>${esc(g.mapel || '-')}</b></p>`}
+    <div class="scroll"><table><tr><th>Hari</th><th>Jam</th>${all ? '<th>Guru</th>' : ''}<th>Kelas</th><th>Mata Pelajaran</th><th>Ruang</th><th>Aksi</th></tr>${L.map(x =>
+      `<tr><td>${esc(x.hari)}</td><td>${esc(x.mulai)}–${esc(x.selesai)}</td>${all ? `<td>${esc(x.guru)}</td>` : ''}<td>${esc(x.kelas)}</td><td>${esc(x.mapel)}</td><td>${esc(x.ruang)}</td><td style="white-space:nowrap">${actBtns(x.id)}</td></tr>`).join('')
+      || `<tr><td colspan="${all ? 7 : 6}" class="mu">Belum ada jadwal. Klik "+ Tambah Jadwal" untuk membuat.</td></tr>`}</table></div></div>`;
   const form = x => {
-    const kl = splitL(g.kelas), mp = splitL(g.mapel);
-    if (!kl.length || !mp.length) return notif('Tetapkan dulu kelas & mapel yang diampu guru ini (tab Data Guru → Edit).', 'err');
-    modal(x ? 'Edit Jadwal' : 'Tambah Jadwal', `<p class="mu" style="margin-top:0">Guru: <b>${esc(g.nama)}</b></p><div class="row2">
+    const cur = x ? String(x.email_guru).toLowerCase() : (all ? guru[0].email : email);
+    const fill = (f, em, ks, ms) => {
+      const gg = guru.find(v => v.email.toLowerCase() === em) || guru[0], kl = splitL(gg.kelas), mp = splitL(gg.mapel);
+      f.elements.kelas.innerHTML = opts(kl, ks); f.elements.mapel.innerHTML = opts(mp, ms);
+      $('#jwarn', f).textContent = kl.length && mp.length ? '' : '⚠️ Guru ini belum memiliki kelas/mapel yang diampu. Tetapkan dulu di Pengaturan Data → Data Guru → Edit.';
+    };
+    const f = modal(x ? 'Edit Jadwal' : 'Tambah Jadwal', `<div class="row2">
+      <label style="grid-column:1/-1">Guru<select name="guru">${guru.map(v => `<option value="${esc(v.email)}" ${v.email.toLowerCase() === cur ? 'selected' : ''}>${esc(v.nama)}</option>`).join('')}</select></label>
       <label>Hari<select name="hari">${opts(HARI, x?.hari)}</select></label><label>Ruang (opsional)<input name="ruang" value="${esc(x?.ruang)}" placeholder="R.101 / Lab 2"></label>
       <label>Jam Mulai<input type="time" name="mulai" required value="${esc(x?.mulai || '07:00')}"></label><label>Jam Selesai<input type="time" name="selesai" required value="${esc(x?.selesai || '08:30')}"></label>
-      <label>Kelas<select name="kelas">${opts(kl, x?.kelas)}</select></label><label>Mata Pelajaran<select name="mapel">${opts(mp, x?.mapel)}</select></label></div>`,
+      <label>Kelas<select name="kelas"></select></label><label>Mata Pelajaran<select name="mapel"></select></label></div><p id="jwarn" class="mu" style="color:var(--er)"></p>`,
     async f => {
-      const e = f.elements, r = await api('saveJadwal', { id: x ? x.id : '', email, hari: e.hari.value, mulai: e.mulai.value, selesai: e.selesai.value, kelas: e.kelas.value, mapel: e.mapel.value, ruang: e.ruang.value });
-      notif(r.message); await jadwalPanel(el, email);
+      const e = f.elements, r = await api('saveJadwal', { id: x ? x.id : '', email: e.guru.value, hari: e.hari.value, mulai: e.mulai.value, selesai: e.selesai.value, kelas: e.kelas.value, mapel: e.mapel.value, ruang: e.ruang.value });
+      notif(r.message); await jadwalPanel(el, all ? '*' : e.guru.value);
     });
+    fill(f, cur, x?.kelas, x?.mapel);
+    f.elements.guru.onchange = () => fill(f, f.elements.guru.value.toLowerCase());
   };
   $('#jg').onchange = safe(() => jadwalPanel(el, $('#jg').value));
   $('#jadd').onclick = () => form();
@@ -330,7 +378,7 @@ async function jadwalPanel(el, sel) {
     const b = e.target.closest('[data-a]'); if (!b) return;
     const x = L.find(j => j.id === b.dataset.i);
     if (b.dataset.a === 'e') form(x);
-    else if (confirm(`Hapus jadwal ${x.hari} ${x.mulai}–${x.selesai} (${x.mapel}, ${x.kelas})?`)) { notif((await api('hapusJadwal', { id: x.id })).message); await jadwalPanel(el, email); }
+    else if (confirm(`Hapus jadwal ${x.hari} ${x.mulai}–${x.selesai} (${x.mapel}, ${x.kelas})?`)) { notif((await api('hapusJadwal', { id: x.id })).message); await jadwalPanel(el, all ? '*' : email); }
   });
 }
 
@@ -395,7 +443,7 @@ async function importPanel(el) {
 }
 
 // ---------- Profil & Sekolah ----------
-function meBox() { $('#me').innerHTML = `<b>${esc(S.user.nama)}</b><br>${esc(S.user.peran)}${S.sekolah ? '<br><span class="mu">' + esc(S.sekolah) + '</span>' : ''}<br><small class="mu">SIAGU v7</small>`; }
+function meBox() { $('#me').innerHTML = `<b>${esc(S.user.nama)}</b><br>${esc(S.user.peran)}${S.sekolah ? '<br><span class="mu">' + esc(S.sekolah) + '</span>' : ''}<br><small class="mu">SIAGU v11</small>`; }
 const saveS = () => localStorage.setItem('siagu', JSON.stringify(S));
 let KOP = null; // null | 'DEL' | {name,mime,data,prev}
 function readKop(file) {
@@ -458,18 +506,20 @@ async function pRekap() {
   const B = await bootData(), kl = B.kelas, d = new Date(); d.setDate(1);
   $('#view').innerHTML = `<div class="pg"><div><h1>Pusat Laporan & Rekapitulasi PDF</h1><p class="mu">PDF dibuat otomatis dan disimpan di Google Drive.</p></div></div>
   <div class="card"><div class="row2"><label>Jenis Dokumen<select id="rj"><option value="jurnal">Rekap Jurnal Harian</option><option value="nilai">Daftar Nilai</option></select></label>
-    <label>Kelas<select id="rk">${opts(kl)}</select></label>
-    <label>Dari<input type="date" id="rd" value="${d.toLocaleDateString('sv-SE')}"></label><label>Sampai<input type="date" id="rs" value="${today()}"></label></div>
+    <label>Kelas<select id="rk"><option value="">Semua Kelas (khusus Rekap Jurnal)</option>${opts(kl)}</select></label>
+    <label>Dari<input type="date" id="rd" value="${d.toLocaleDateString('sv-SE')}"></label><label>Sampai<input type="date" id="rs" value="${eom()}"></label></div>
     <label>Mata Pelajaran (untuk Daftar Nilai)${B.mapel.length ? `<select id="rm">${opts(B.mapel)}</select>` : '<input id="rm">'}</label>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="rf" checked style="width:auto;height:auto"> Sertakan foto dokumentasi kegiatan (maks. 2 foto per jurnal, khusus Rekap Jurnal)</label>
     <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="re" style="width:auto;height:auto"> Kirim juga ke email saya via Gmail</label>
     <button class="btn" id="rg">Generate & Unduh PDF</button></div>`;
   $('#rg').onclick = safe(async () => {
-    const r = await api('rekapPdf', { jenis: $('#rj').value, kelas: $('#rk').value, mapel: $('#rm').value, dari: $('#rd').value, sampai: $('#rs').value, kirimEmail: $('#re').checked });
+    if ($('#rj').value === 'nilai' && !$('#rk').value) throw new Error('Pilih satu kelas untuk Daftar Nilai.');
+    const r = await api('rekapPdf', { jenis: $('#rj').value, kelas: $('#rk').value, mapel: $('#rm').value, dari: $('#rd').value, sampai: $('#rs').value, kirimEmail: $('#re').checked, foto: $('#rf').checked });
     dl(r.data.pdf, r.data.name); notif('PDF dibuat & tersimpan di Drive.');
   });
 }
 
-const NEED_API = 7; // versi backend minimum
+const NEED_API = 11; // versi backend minimum
 async function cekBackend() {
   try {
     const j = await (await fetch(GAS_URL)).json();
