@@ -3,4 +3,4 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbz9aomaUlndpXZtJRHVs2b1
 const TAHUN_AJARAN = '2026/2027';
 const SEMESTER = 'Ganjil';
 const KKM = 75;
-const API_VERSION = 11;
+const API_VERSION = 12;

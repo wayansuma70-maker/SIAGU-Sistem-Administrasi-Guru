@@ -443,7 +443,7 @@ async function importPanel(el) {
 }
 
 // ---------- Profil & Sekolah ----------
-function meBox() { $('#me').innerHTML = `<b>${esc(S.user.nama)}</b><br>${esc(S.user.peran)}${S.sekolah ? '<br><span class="mu">' + esc(S.sekolah) + '</span>' : ''}<br><small class="mu">SIAGU v11</small>`; }
+function meBox() { $('#me').innerHTML = `<b>${esc(S.user.nama)}</b><br>${esc(S.user.peran)}${S.sekolah ? '<br><span class="mu">' + esc(S.sekolah) + '</span>' : ''}<br><small class="mu">SIAGU v12</small>`; }
 const saveS = () => localStorage.setItem('siagu', JSON.stringify(S));
 let KOP = null; // null | 'DEL' | {name,mime,data,prev}
 function readKop(file) {
@@ -502,24 +502,40 @@ async function pProfil() {
 }
 
 // ---------- Rekap PDF ----------
+function pdfUrl(b64) {
+  try { const bin = atob(b64), arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i); return URL.createObjectURL(new Blob([arr], { type: 'application/pdf' })); }
+  catch (e) { return 'data:application/pdf;base64,' + b64; }
+}
+let lastPdf = '';
+function showPreview(p) {
+  if (lastPdf.startsWith('blob:')) URL.revokeObjectURL(lastPdf);
+  const u = lastPdf = pdfUrl(p.pdf);
+  $('#rprev').innerHTML = `<div class="card sec" style="margin-top:16px"><div class="pg"><h2>Pratinjau: ${esc(p.name)}</h2>
+    <div><a class="btn" href="${u}" download="${esc(p.name)}">⬇️ Unduh PDF</a> <a class="btn out" href="${u}" target="_blank" rel="noopener">Buka di Tab Baru</a></div></div>
+    <iframe class="pv" src="${u}" title="Pratinjau PDF"></iframe><p class="mu">Jika pratinjau tidak tampil di ponsel, gunakan tombol <b>Unduh PDF</b>.</p></div>`;
+}
 async function pRekap() {
-  const B = await bootData(), kl = B.kelas, d = new Date(); d.setDate(1);
-  $('#view').innerHTML = `<div class="pg"><div><h1>Pusat Laporan & Rekapitulasi PDF</h1><p class="mu">PDF dibuat otomatis dan disimpan di Google Drive.</p></div></div>
-  <div class="card"><div class="row2"><label>Jenis Dokumen<select id="rj"><option value="jurnal">Rekap Jurnal Harian</option><option value="nilai">Daftar Nilai</option></select></label>
-    <label>Kelas<select id="rk"><option value="">Semua Kelas (khusus Rekap Jurnal)</option>${opts(kl)}</select></label>
+  const B = await bootData(), adm = S.user.peran === 'Admin', kl = B.kelas, d = new Date(); d.setDate(1);
+  const guru = adm ? (await api('getGuru', {})).data.guru.filter(g => g.status === 'Aktif') : [];
+  $('#view').innerHTML = `<div class="pg"><div><h1>Pusat Laporan & Rekapitulasi PDF</h1><p class="mu">Rekap dikelompokkan per guru, mata pelajaran, dan kelas. Hasil tampil di layar dan dapat diunduh.</p></div></div>
+  <div class="card"><div class="row2"><label>Jenis Dokumen<select id="rj"><option value="jurnal">Rekap Jurnal Harian</option><option value="absensi">Rekap Kehadiran Siswa (semua siswa per tanggal)</option><option value="nilai">Daftar Nilai</option></select></label>
+    ${adm ? `<label>Guru<select id="rgu"><option value="">Semua Guru</option>${guru.map(g => `<option value="${esc(g.email)}">${esc(g.nama)}</option>`).join('')}</select></label>` : ''}
+    <label>Kelas<select id="rk"><option value="">Semua Kelas</option>${opts(kl)}</select></label>
+    <label>Mata Pelajaran<select id="rm"><option value="">Semua Mata Pelajaran</option>${opts(B.mapel)}</select></label>
     <label>Dari<input type="date" id="rd" value="${d.toLocaleDateString('sv-SE')}"></label><label>Sampai<input type="date" id="rs" value="${eom()}"></label></div>
-    <label>Mata Pelajaran (untuk Daftar Nilai)${B.mapel.length ? `<select id="rm">${opts(B.mapel)}</select>` : '<input id="rm">'}</label>
+    <p class="mu" style="margin:0 0 12px">Daftar Nilai wajib memilih satu kelas dan satu mata pelajaran. Rekap Jurnal dan Kehadiran dapat memuat semua kelas dan mapel.</p>
     <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="rf" checked style="width:auto;height:auto"> Sertakan foto dokumentasi kegiatan (maks. 2 foto per jurnal, khusus Rekap Jurnal)</label>
     <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="re" style="width:auto;height:auto"> Kirim juga ke email saya via Gmail</label>
-    <button class="btn" id="rg">Generate & Unduh PDF</button></div>`;
+    <button class="btn" id="rg">Generate & Unduh PDF</button></div><div id="rprev"></div>`;
   $('#rg').onclick = safe(async () => {
-    if ($('#rj').value === 'nilai' && !$('#rk').value) throw new Error('Pilih satu kelas untuk Daftar Nilai.');
-    const r = await api('rekapPdf', { jenis: $('#rj').value, kelas: $('#rk').value, mapel: $('#rm').value, dari: $('#rd').value, sampai: $('#rs').value, kirimEmail: $('#re').checked, foto: $('#rf').checked });
-    dl(r.data.pdf, r.data.name); notif('PDF dibuat & tersimpan di Drive.');
+    const j = $('#rj').value;
+    if (j === 'nilai' && (!$('#rk').value || !$('#rm').value)) throw new Error('Pilih satu kelas dan satu mata pelajaran untuk Daftar Nilai.');
+    const r = await api('rekapPdf', { jenis: j, kelas: $('#rk').value, mapel: $('#rm').value, guru: adm ? $('#rgu').value : '', dari: $('#rd').value, sampai: $('#rs').value, kirimEmail: $('#re').checked, foto: $('#rf').checked });
+    dl(r.data.pdf, r.data.name); showPreview(r.data); notif('Rekap dibuat dan diunduh. Pratinjau tampil di bawah.');
   });
 }
 
-const NEED_API = 11; // versi backend minimum
+const NEED_API = 12; // versi backend minimum
 async function cekBackend() {
   try {
     const j = await (await fetch(GAS_URL)).json();
